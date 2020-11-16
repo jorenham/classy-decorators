@@ -5,26 +5,41 @@ __all__ = ["Decorator"]
 import functools
 from typing import Any, Callable, Generic, Optional, Type, TypeVar, Union
 
-from classy_decorators.method_types import FunctionType, get_function_type
+from classy_decorators.method_types import (
+    ClassMethod,
+    ClassMethodDescriptor,
+    FunctionType,
+    get_function_type,
+)
 
 T = TypeVar("T")
 FT = TypeVar("FT", bound=Callable[..., Any])
+CMD = TypeVar("CMD", classmethod, staticmethod)
 
 
 class Decorator(Generic[FT, T]):
     __name__: str
     __qualname__: str
     __self__: Union[T, Type[T]]
+    __func__: FT
 
     def __init__(
         self,
-        function: FT,
+        function: Union[FT, ClassMethod[FT], ClassMethodDescriptor[Any, FT]],
         /,
         *args,
         _unbound_function_type: Optional[FunctionType] = None,
         **kwargs,
     ):
-        self.__func__: FT = function
+        self.__func_wrapped = function
+        if isinstance(function, ClassMethodDescriptor):
+            if callable(function):
+                self.__func__ = function
+            else:
+                self.__func__ = function.__func__
+        else:
+            self.__func__ = function
+
         self.__unbound_function_type = _unbound_function_type
 
         functools.update_wrapper(
@@ -45,6 +60,11 @@ class Decorator(Generic[FT, T]):
 
         self._args, self._kwargs = args, kwargs
 
+        self.__post_init__()
+
+    def __post_init__(self):
+        ...
+
     def __set_name__(self, owner: Type[T], name: str):
         if self.owner is None:
             self.owner = owner
@@ -52,7 +72,7 @@ class Decorator(Generic[FT, T]):
     def __get__(
         self: Decorator[FT, T], instance: T, owner: Type[T]
     ) -> Decorator[FT, T]:
-        inner_get = getattr(self.__func__, "__get__")
+        inner_get = getattr(self.__func_wrapped, "__get__")
         unbound_function_type = self.__unbound_function_type
         if (self.is_classmethod or self.is_staticmethod) and self.is_unbound:
             unbound_function_type = self.function_type
@@ -105,7 +125,7 @@ class Decorator(Generic[FT, T]):
             return self_bound.__func__ == other.__func__
         else:
             # unbound class/staticmethods are wrapper instances of
-            # class/staticmethod
+            #  class/staticmethod
             self_func = getattr(self.__func__, "__func__", self.__func__)
             other_func = getattr(other.__func__, "__func__", other.__func__)
             return self_func == other_func
@@ -169,7 +189,7 @@ class Decorator(Generic[FT, T]):
         if self.__unbound_function_type:
             return self.__unbound_function_type.as_bound()
         else:
-            return get_function_type(self.__func__)
+            return get_function_type(self.__func_wrapped)
 
     @classmethod
     def __typecheck_order_operator_param(cls, other, operator: str):

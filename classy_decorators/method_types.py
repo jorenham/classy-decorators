@@ -1,15 +1,38 @@
 from __future__ import annotations
 
-__all__ = ["get_function_type", "FunctionType"]
+__all__ = [
+    "get_function_type",
+    "FunctionType",
+    "ClassMethod",
+    "ClassMethodDescriptor",
+]
 
 import enum
 import inspect
-from typing import Callable, TypeVar
+from typing import Any, Callable, Protocol, TypeVar, Union, runtime_checkable
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
 T_contra = TypeVar("T_contra", contravariant=True)
 C = TypeVar("C", bound=Callable)
+
+FT = TypeVar("FT", bound=Callable[..., Any])
+CMD_contra = TypeVar(
+    "CMD_contra", classmethod, staticmethod, contravariant=True
+)
+
+
+@runtime_checkable
+class ClassMethodDescriptor(Protocol[CMD_contra, FT]):
+    __func__: FT
+
+    def __get__(self, __origin: CMD_contra, *args, **kwargs):
+        ...
+
+
+@runtime_checkable
+class ClassMethod(ClassMethodDescriptor, Protocol[FT]):
+    __call__: FT
 
 
 class FunctionType(enum.Flag):
@@ -68,7 +91,9 @@ class FunctionType(enum.Flag):
             raise TypeError(f"unknown {repr(self)}")
 
 
-def get_function_type(fn: Callable) -> FunctionType:
+def get_function_type(
+    fn: Union[Callable, ClassMethodDescriptor]
+) -> FunctionType:
     """If ignore_staticmethod is set, staticmethods are considered functions"""
     if isinstance(fn, classmethod):
         return FunctionType.CLASSMETHOD_UNBOUND
