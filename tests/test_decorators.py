@@ -1,3 +1,5 @@
+from typing import Set
+
 import pytest
 
 from classy_decorators import Decorator
@@ -5,9 +7,20 @@ from classy_decorators.method_types import FunctionType
 
 
 class MyDecorator(Decorator):
+    decorated: Set[str] = set()
+
     def __call__(self, *args, **kwargs):
         super().__call__(*args, **kwargs)
         return self.function_type
+
+    def __bind__(self, instance):
+        self.bound_instance = instance
+
+    def __bind_class__(self, cls):
+        self.bound_class = cls
+
+    def __decorate__(self):
+        MyDecorator.decorated.add(self.__qualname__)
 
 
 class Spam:
@@ -37,6 +50,34 @@ def eggs():
 
 ham_inner = lambda: ...  # noqa
 ham = MyDecorator(ham_inner)
+
+
+@pytest.mark.parametrize(
+    "fn", [Spam.method, Spam.classmethod, Spam.staticmethod, eggs, ham]
+)
+def test_decorate(fn):
+    assert fn.__qualname__ in fn.decorated
+
+
+@pytest.mark.parametrize(
+    "method", [Spam.method, Spam.classmethod, Spam.staticmethod]
+)
+def test_bind_class(method):
+    assert method.bound_class is Spam
+    assert not hasattr(method, "bound_instance")
+
+
+@pytest.mark.parametrize("fn", [eggs, ham])
+def test_bind_function(fn):
+    assert not hasattr(fn, "bound_class")
+    assert not hasattr(fn, "bound_instance")
+
+
+def test_bind_instance_method():
+    instance = Spam()
+    assert instance.method.bound_instance is instance
+    assert not hasattr(instance.classmethod, "bound_class")
+    assert not hasattr(instance.staticmethod, "bound_class")
 
 
 @pytest.mark.parametrize(

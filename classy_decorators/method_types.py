@@ -27,7 +27,7 @@ class ClassMethodDescriptor(Protocol[CMD_contra, FT]):
     __func__: FT
 
     def __get__(self, __origin: CMD_contra, *args, **kwargs):
-        ...
+        ...  # pragma: no cover
 
 
 @runtime_checkable

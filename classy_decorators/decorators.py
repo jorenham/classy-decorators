@@ -3,7 +3,18 @@ from __future__ import annotations
 __all__ = ["Decorator"]
 
 import functools
-from typing import Any, Callable, Generic, Optional, Type, TypeVar, Union
+from typing import (
+    Any,
+    Callable,
+    Final,
+    Generic,
+    NoReturn,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    final,
+)
 
 from classy_decorators.method_types import (
     ClassMethod,
@@ -12,26 +23,53 @@ from classy_decorators.method_types import (
     get_function_type,
 )
 
+# type to which the decorated method is bound
 T = TypeVar("T")
+# return value
+RT = TypeVar("RT")
+# decorated function
 FT = TypeVar("FT", bound=Callable[..., Any])
+# classmethod descriptor
 CMD = TypeVar("CMD", classmethod, staticmethod)
 
 
 class Decorator(Generic[FT, T]):
-    __name__: str
-    __qualname__: str
+    """
+    Base class for writing decorators to use on functions, methods,
+    classmethods or staticmethods.
+    """
+
+    __name__: Final[str]
+    __qualname__: Final[str]
     __self__: Union[T, Type[T]]
     __func__: FT
 
+    @final
     def __init__(
         self,
         function: Union[FT, ClassMethod[FT], ClassMethodDescriptor[Any, FT]],
         /,
         *args,
         _unbound_function_type: Optional[FunctionType] = None,
+        _decorate: bool = True,
         **kwargs,
     ):
+        """
+
+        :param function: The decorated function, method, classmethod or
+            staticmethod descriptor instance.
+        :param args: Decorator args, passed to the bound decorator.
+        :param _unbound_function_type: Optional unbound class/staticmethod
+            function type, needed because the bound staticmethod function type
+            cannot be reliably determined with `get_function_type(function)`
+            (it would otherwise be classified as `FunctionType.Function`).
+        :param _decorate: Whether to call __decorate__, set to False when
+            instantiated from __get__.
+        :param kwargs: Decorator kwargs, passed to the bound decorator.
+        """
         self.__func_wrapped = function
+
+        # verbose nested conditions for mypy-compatibility
         if isinstance(function, ClassMethodDescriptor):
             if callable(function):
                 self.__func__ = function
@@ -42,11 +80,15 @@ class Decorator(Generic[FT, T]):
 
         self.__unbound_function_type = _unbound_function_type
 
-        functools.update_wrapper(
-            self,
-            self.__func__,
-            assigned=("__self__", *functools.WRAPPER_ASSIGNMENTS),
-        )
+        # verbose variant for functools.update_wrapper for mypy-compatibilty
+        self.__module__ = self.__func__.__module__
+        self.__name__ = self.__func__.__name__
+        self.__qualname__ = self.__func__.__qualname__
+        self.__doc__ = self.__func__.__doc__
+        self.__annotations__ = self.__func__.__annotations__
+        if (_self := getattr(self.__func__, "__self__", None)) is not None:
+            self.__self__ = _self
+        self.__dict__.update(self.__func__.__dict__)
 
         self.owner: Optional[Type[T]] = None
         if self.is_method and self.is_bound:
@@ -60,29 +102,37 @@ class Decorator(Generic[FT, T]):
 
         self._args, self._kwargs = args, kwargs
 
-        self.__post_init__()
-
-    def __post_init__(self):
-        ...
+        if _decorate:
+            self.__decorate__()
 
     def __set_name__(self, owner: Type[T], name: str):
         if self.owner is None:
             self.owner = owner
 
     def __get__(
-        self: Decorator[FT, T], instance: T, owner: Type[T]
+        self: Decorator[FT, T], instance: Optional[T], owner: Type[T]
     ) -> Decorator[FT, T]:
         inner_get = getattr(self.__func_wrapped, "__get__")
         unbound_function_type = self.__unbound_function_type
+
         if (self.is_classmethod or self.is_staticmethod) and self.is_unbound:
             unbound_function_type = self.function_type
 
-        return type(self)(
+        res = type(self)(
             inner_get(instance, owner),  # noqa
             *self._args,
             _unbound_function_type=unbound_function_type,
+            _decorate=False,
             **self._kwargs,
         )
+
+        if self.is_method and self.is_unbound:
+            if instance is None:
+                res.__bind_class__(owner)
+            else:
+                res.__bind__(instance)
+
+        return res
 
     def __call__(self, *args, **kwargs):
         if self.function_type in FunctionType.METHOD_UNBOUND:
@@ -152,38 +202,46 @@ class Decorator(Generic[FT, T]):
 
     __str__ = __repr__
 
+    @final
     @functools.cached_property
     def is_function(self):
         return self.function_type is FunctionType.FUNCTION
 
+    @final
     @functools.cached_property
     def is_method(self):
         return self.function_type in FunctionType.METHOD
 
+    @final
     @functools.cached_property
     def is_instancemethod(self):
         return self.function_type in FunctionType.INSTANCEMETHOD
 
+    @final
     @functools.cached_property
     def is_classmethod(self):
         return self.function_type in FunctionType.CLASSMETHOD
 
+    @final
     @functools.cached_property
     def is_staticmethod(self):
         return self.function_type in FunctionType.STATICMETHOD
 
+    @final
     @functools.cached_property
     def is_unbound(self):
         if not self.is_method:
             raise TypeError("not a method")
         return self.function_type in FunctionType.METHOD_UNBOUND
 
+    @final
     @functools.cached_property
     def is_bound(self):
         if not self.is_method:
             raise TypeError("not a method")
         return self.function_type in FunctionType.METHOD_BOUND
 
+    @final
     @functools.cached_property
     def function_type(self) -> FunctionType:
         if self.__unbound_function_type:
@@ -198,3 +256,13 @@ class Decorator(Generic[FT, T]):
                 f"'{operator}' not supported between instances of {cls} and "
                 f"{type(other)}"
             )
+
+    # The following methods are meant for overriding
+    def __decorate__(self) -> NoReturn:
+        ...  # pragma: no cover
+
+    def __bind__(self, instance: T) -> NoReturn:
+        ...  # pragma: no cover
+
+    def __bind_class__(self, cls: Type[T]) -> NoReturn:
+        ...  # pragma: no cover
