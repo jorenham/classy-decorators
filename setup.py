@@ -5,10 +5,13 @@ from setuptools import find_packages, setup
 _BASE_PATH = Path(__file__).parent
 _VERSION_PATH = _BASE_PATH / "VERSION"
 
-NAME = "Classy Decorators"
+NAME = "classy-decorators"
 DESCRIPTION = (
     "Hassle-free creation of decorators for functions and methods, OO-style."
 )
+with open(_BASE_PATH / "README.md", "r") as f:
+    LONG_DESCRIPTION = f.read()
+
 URL = "https://github.com/jorenham/classy-decorators/"
 AUTHOR = "Joren Hammudoglu"
 
@@ -24,7 +27,8 @@ setup(
     version=VERSION,
     install_requires=REQUIREMENTS,
     packages=find_packages(exclude=["tests"]),
-    long_description="Utility package for creating class-bassed decorators.",
+    long_description=LONG_DESCRIPTION,
+    long_description_content_type="text/markdown",
     classifiers=[
         "Intended Audience :: Developers",
         "Topic :: Software Development :: Libraries :: Python Modules",
