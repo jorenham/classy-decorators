@@ -17,7 +17,7 @@ AUTHOR = "Joren Hammudoglu"
 
 REQUIRES_PYTHON = ">=3.8.0"
 VERSION = _VERSION_PATH.read_text().strip()
-REQUIREMENTS = []
+REQUIREMENTS = ["typeguard"]
 
 setup(
     name=NAME,
@@ -26,6 +26,7 @@ setup(
     url=URL,
     version=VERSION,
     install_requires=REQUIREMENTS,
+    python_requires=REQUIRES_PYTHON,
     packages=find_packages(exclude=["tests"]),
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
