@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 __all__ = [
+    "is_decoratable",
     "get_function_type",
     "FunctionType",
     "ClassMethod",
@@ -9,7 +10,16 @@ __all__ = [
 
 import enum
 import inspect
-from typing import Any, Callable, Protocol, TypeVar, Union, runtime_checkable
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Protocol,
+    TypeVar,
+    Union,
+    overload,
+    runtime_checkable,
+)
 
 T = TypeVar("T")
 T_co = TypeVar("T_co", covariant=True)
@@ -89,6 +99,24 @@ class FunctionType(enum.Flag):
             return FunctionType.STATICMETHOD_BOUND
         else:  # pragma: no cover
             raise TypeError(f"unknown {repr(self)}")
+
+
+@overload
+def is_decoratable(
+    fn: Union[
+        Callable, classmethod, staticmethod, ClassMethod, ClassMethodDescriptor
+    ]
+) -> Literal[True]:
+    ...  # pragma: no cover
+
+
+@overload
+def is_decoratable(fn: Any) -> bool:
+    ...  # pragma: no cover
+
+
+def is_decoratable(fn: Union[Callable, classmethod, staticmethod, Any]) -> bool:
+    return callable(fn) or isinstance(fn, (classmethod, staticmethod))
 
 
 def get_function_type(

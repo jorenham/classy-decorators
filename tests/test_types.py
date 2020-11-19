@@ -1,6 +1,6 @@
 import pytest
 
-from classy_decorators.method_types import FunctionType, get_function_type
+from classy_decorators.function_types import FunctionType, get_function_type
 
 
 class Spam:
