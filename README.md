@@ -30,6 +30,12 @@ Python 3.8 or 3.9.
 pip install classy-decorators
 ```
 
+for better runtime type checking:
+
+```bash
+pip install classy-decorators[typeguard]
+```
+
 
 ## Usage 
 
