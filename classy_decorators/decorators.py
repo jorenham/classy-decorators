@@ -9,6 +9,7 @@ from typing import (
     Callable,
     ClassVar,
     Dict,
+    Final,
     FrozenSet,
     Generic,
     NoReturn,
@@ -20,11 +21,19 @@ from typing import (
     Union,
     cast,
     final,
+    get_args,
+    get_origin,
     get_type_hints,
     overload,
 )
 
-import typeguard
+try:
+    import typeguard
+except ImportError:
+    typeguard = NotImplemented
+    _TYPEGUARD = False
+else:
+    _TYPEGUARD = True
 
 from classy_decorators.function_types import (
     ClassMethod,
@@ -78,6 +87,37 @@ class Param(Generic[PT]):
             f"default={self.default!r},"
             ")"
         )
+
+    def is_of_type(self, arg) -> Optional[bool]:
+        """
+        Checks if arg is of the param type.
+        Uses typeguard if installed, otherwise a simple typechecking of the
+        origin type is done and returns None if the type could not be checked.
+        """
+        if self.type is Missing:  # pragma: no cover
+            raise TypeError("decorator param has no type")
+        if self.name is Missing:  # pragma: no cover
+            raise TypeError("decorator param has no name")
+
+        if _TYPEGUARD:
+            try:
+                typeguard.check_type(cast(str, self.name), arg, self.type)
+            except TypeError:
+                return False
+            else:
+                return True
+        else:
+            return _isinstance_typing(arg, cast(Type[PT], self.type))
+
+    def check_type(self, arg):
+        if self.name is Missing:  # pragma: no cover
+            raise TypeError("decorator param has no name")
+
+        if self.is_of_type(arg) is False:
+            raise TypeError(
+                f"type of decorator parameter '{self.name}' must be "
+                f"'{self.type}'; got '{type(arg)}' instead"
+            )
 
 
 class BaseDecoratorType(Protocol[MaybeFT]):
@@ -159,7 +199,7 @@ class Decorator(Generic[D, MaybeFT]):
             for arg, (name, param) in zip(
                 args, self.__decorator_params__.items()
             ):
-                typeguard.check_type(name, arg, param.type)
+                param.check_type(arg)
                 self.__param_values[name] = arg
 
             for name, arg in kwargs.items():
@@ -175,7 +215,7 @@ class Decorator(Generic[D, MaybeFT]):
                     )
 
                 param = self.__decorator_params__[name]
-                typeguard.check_type(name, arg, param.type)
+                param.check_type(arg)
                 self.__param_values[name] = arg
 
         elif len(args) != 1 or kwargs:  # pragma: no cover
@@ -481,6 +521,13 @@ def _get_param(cls: Type[Decorator], name: str, tp: Type[PT]) -> Param[PT]:
 
     param.name = name
     param.type = tp
+
+    if default is not Missing and param.is_of_type(default) is False:
+        raise TypeError(
+            f"type of decorator parameter default '{param.name}' must be "
+            f"'{param.type}'; got '{type(default)}' instead"
+        )
+
     return param
 
 
@@ -490,3 +537,55 @@ def _specialattr(name: str) -> bool:
 
 def _privateattr(cls: type, name: str) -> bool:
     return name.startswith(f"_{cls.__name__}__")
+
+
+def _isinstance_typing(  # noqa: C901
+    arg: Union[T, Any], tp: Optional[Type[T]]
+) -> Optional[bool]:
+    if tp is Any:
+        return True
+    if tp is None:
+        return arg is None
+
+    try:
+        return isinstance(arg, tp)
+    except TypeError:
+        pass
+
+    if isinstance(tp, TypeVar):
+        if tp.__constraints__:
+            return any(type(arg) is c for c in tp.__constraints__)
+        elif tp.__bound__:
+            return isinstance(arg, tp.__bound__)
+        else:
+            # resolving TypeVars; no thank you
+            return None
+
+    origin = get_origin(tp)
+    tp_args = get_args(tp)
+    if origin is Union:
+        indeterminate = False
+        for _tp in tp_args:
+            res = _isinstance_typing(arg, _tp)
+            if res is None:
+                indeterminate = True
+            elif res is True:
+                return True
+
+        if not indeterminate:
+            return False
+
+    elif (origin is ClassVar or origin is Final) and tp_args:
+        return _isinstance_typing(arg, tp_args[0])
+    elif origin is type:
+        if not isinstance(arg, type):
+            return False
+        if isinstance(tp_args[0], type):
+            return arg is tp_args[0]
+        else:
+            # TODO: recurse
+            return None
+    elif origin is not None:
+        return _isinstance_typing(arg, origin)
+
+    return None  # pragma: no cover

@@ -1,5 +1,8 @@
+from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar
+
 import pytest
 
+from classy_decorators.decorators import _isinstance_typing
 from classy_decorators.function_types import FunctionType, get_function_type
 
 
@@ -112,3 +115,38 @@ def test_as_bound_error(tp):
 def test_funtion_type_error():
     with pytest.raises(TypeError):
         get_function_type("nope")  # noqa
+
+
+Real = TypeVar("Real", int, float)
+ST = TypeVar("ST", bound=Spam)
+T = TypeVar("T")
+
+
+@pytest.mark.parametrize(
+    "arg, tp, res",
+    [
+        ("spam", str, True),
+        ("spam", int, False),
+        ([], List[str], True),
+        ((), List[str], False),
+        ({}, Dict[str, str], True),
+        ("spam", Any, True),
+        (str, Type[str], True),
+        (str, Type[int], False),
+        ("foo", Type[str], False),
+        (str, Type[T], None),
+        ("spam", ClassVar[str], True),
+        ("spam", ClassVar[int], False),
+        ("spam", Optional[str], True),
+        (None, Optional[str], True),
+        (6, Optional[str], False),
+        (3.14, Real, True),
+        (3, Real, True),
+        (Spam(), ST, True),
+        (Spam(), T, None),
+        (6, Optional[T], None),
+        (None, None, True),
+    ],
+)
+def test_isinstance_typing(arg, tp, res):
+    assert _isinstance_typing(arg, tp) is res
