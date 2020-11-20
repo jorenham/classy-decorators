@@ -1,11 +1,14 @@
+import importlib
+import sys
+from importlib.abc import MetaPathFinder
 from typing import Optional
 
 import pytest
 
-from classy_decorators import Decorator
+from classy_decorators import decorators
 
 
-class MyDecorator(Decorator):
+class MyDecorator(decorators.Decorator):
     spam: str
     ham: Optional[str] = None
     eggs: int = 6
@@ -150,7 +153,7 @@ def test_wrap_with_kwargs_error():
 def test_no_annotation():
     with pytest.raises(TypeError):
 
-        class BadDecorator(Decorator):
+        class BadDecorator(decorators.Decorator):
             nope = "nope"
 
 
@@ -158,3 +161,37 @@ def test_decorate_partial_type_error():
     dec = MyDecorator("spam")
     with pytest.raises(TypeError):
         dec(None)
+
+
+def test_type_error_default():
+    with pytest.raises(TypeError):
+
+        class _Decorator(decorators.Decorator):
+            spam: str = 6
+
+
+def test_type_error_param():
+    with pytest.raises(TypeError):
+        MyDecorator(spam=6)
+
+
+def test_no_typeguard():
+    # mock import error for typeguard
+    class ImportRaiser(MetaPathFinder):
+        def find_spec(self, fullname, path, target=None):
+            if fullname == "typeguard":
+                raise ImportError
+
+    sys.meta_path.insert(0, ImportRaiser())
+    del sys.modules["typeguard"]
+    importlib.reload(decorators)
+
+    assert not decorators._TYPEGUARD
+
+    with pytest.raises(TypeError):
+
+        class _Decorator(decorators.Decorator):
+            spam: str = 6
+
+    with pytest.raises(TypeError):
+        MyDecorator(spam=6)
