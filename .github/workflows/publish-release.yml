@@ -3,32 +3,14 @@ name: pre-commit
 on:
   pull_request:
   push:
-    branches: [master, develop]
+    tags:
+      - 'v*'
 
 jobs:
-  pre-commit:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.8'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Run pre-commit
-      uses: pre-commit/action@v2.0.0
-
   publish-release:
     name: Create Release
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-    needs: pre-commit
     steps:
       - uses: actions/checkout@v2
 
